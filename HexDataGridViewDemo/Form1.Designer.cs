@@ -28,14 +28,16 @@
         /// </summary>
         private void InitializeComponent()
         {
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Form1));
             this.bytesEditControl1 = new WinFormsTest.HexDataGridViewControl();
             this.SuspendLayout();
             // 
             // bytesEditControl1
             // 
+            this.bytesEditControl1.DefaultEncoding = ((System.Text.Encoding)(resources.GetObject("bytesEditControl1.DefaultEncoding")));
             this.bytesEditControl1.Location = new System.Drawing.Point(22, 21);
             this.bytesEditControl1.Name = "bytesEditControl1";
-            this.bytesEditControl1.Size = new System.Drawing.Size(457, 320);
+            this.bytesEditControl1.Size = new System.Drawing.Size(580, 320);
             this.bytesEditControl1.TabIndex = 0;
             // 
             // Form1

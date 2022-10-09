@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Drawing;
 using System.Globalization;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Windows.Forms;
 
@@ -20,6 +21,7 @@ namespace WinFormsTest
         private Func<string, byte> stringToByte;
 
         private readonly Font defaultFont = new Font(FontFamily.GenericMonospace, 9);
+        private readonly Font defaultHeaderFont = new Font(FontFamily.GenericMonospace, 8);
         private DataGridViewCellStyle defaultCellStyle;
         private DataGridViewCellStyle defaultHexCellStyle;
         private DataGridViewCellStyle defaultAsciiCellStyle;
@@ -55,6 +57,7 @@ namespace WinFormsTest
             InitializeEvents();
 
             DoubleBuffered = true;
+            SetDoubleBuffer(this.dataGridView, true);
 
             byteToHexString = ByteToHexString;
             byteToString = ByteToString;
@@ -126,6 +129,7 @@ namespace WinFormsTest
             {
                 BackColor = SystemColors.Control,
                 ForeColor = SystemColors.ControlText,
+                Font = defaultHeaderFont
             };
 
             cellSize = TextRenderer.MeasureText(charToMeasure, defaultCellStyle.Font);
@@ -164,6 +168,12 @@ namespace WinFormsTest
                     dataGridView.Rows[e.RowIndex].Cells[columnindex].Selected = true;
                 }
             };
+        }
+        static void SetDoubleBuffer(Control dgv, bool DoubleBuffered)
+        {
+            typeof(Control).InvokeMember("DoubleBuffered",
+                BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.SetProperty,
+                null, dgv, new object[] { DoubleBuffered });
         }
 
         // -------------------------------------------------------------------------
@@ -232,13 +242,16 @@ namespace WinFormsTest
 
             try
             {
-                byte bValue = (byte)e.Value;
+                if (e.RowIndex >= 0)
+                {
+                    byte bValue = (byte)e.Value;
 
-                e.Value = (e.RowIndex == rowIndexHex)
-                    ? byteToHexString(bValue)
-                    : byteToString(bValue);
+                    e.Value = (e.RowIndex == rowIndexHex)
+                        ? byteToHexString(bValue)
+                        : byteToString(bValue);
 
-                e.FormattingApplied = true;
+                    e.FormattingApplied = true;
+                }
             }
             catch
             {
@@ -284,16 +297,17 @@ namespace WinFormsTest
 
             if (val.Length > 0)
             {
+                SuspendLayout();
+                
                 bool isSelected = (e.State & DataGridViewElementStates.Selected) == DataGridViewElementStates.Selected;
                 e.PaintBackground(e.CellBounds, isSelected);
                 RectangleF backRect = new RectangleF(e.CellBounds.X + 1, e.CellBounds.Y + 1, e.CellBounds.Width - 2, e.CellBounds.Height - 2);
                 e.Graphics.FillRectangle(new SolidBrush(defaultHeaderCellStyle.BackColor), backRect);
-
+                
                 int m = 0;
                 SizeF charSize = e.Graphics.MeasureString(charToMeasure, defaultHeaderCellStyle.Font);
                 float cellCharHeight = (e.CellBounds.Height - (val.Length * m)) / (val.Length);
                 
-
                 PointF p = new PointF(e.CellBounds.X, e.CellBounds.Y + (m * 2));
 
                 for (int i = 0; i < val.Length; i++)
@@ -306,6 +320,7 @@ namespace WinFormsTest
 
                     p = new PointF(p.X, p.Y + cellCharHeight);
                 }
+                ResumeLayout();
             }
         }
 
