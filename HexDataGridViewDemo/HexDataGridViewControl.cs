@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel;
 using System.Drawing;
 using System.Globalization;
 using System.Linq;
@@ -23,6 +25,7 @@ namespace WinFormsTest
         private DataGridViewCellStyle defaultAsciiCellStyle;
         private DataGridViewCellStyle defaultHeaderCellStyle;
         private Size cellSize;
+        private int maxOffsetLength;
 
         private DataGridViewRow rowHex;
         private DataGridViewRow rowAscii;
@@ -33,7 +36,16 @@ namespace WinFormsTest
             LineAlignment = StringAlignment.Center,
         };
 
+        [Browsable(false)]
         public Encoding DefaultEncoding { get; set; } = Encoding.GetEncoding(1250);
+
+        public IEnumerable<byte> GetHexValue()
+        {
+            foreach (DataGridViewTextBoxCell cell in rowHex.Cells)
+            {
+                yield return (byte)cell.Value;
+            }
+        }
 
         public HexDataGridViewControl()
         {
@@ -42,21 +54,24 @@ namespace WinFormsTest
             InitializeGridViewStyle();
             InitializeEvents();
 
+            DoubleBuffered = true;
 
             byteToHexString = ByteToHexString;
             byteToString = ByteToString;
             stringToByte = StringToByte;
         }
 
-        public void SetupGridView(byte[] data)
+        public void SetupGridView(long beginOffset, byte[] data)
         {
+            SuspendLayout();
+
             int index = 0;
             foreach (byte b in data)
             {
                 index++;
                 DataGridViewColumn column = new DataGridViewColumn()
                 {
-                    HeaderText = (index + 999).ToString(),
+                    HeaderText = (index + beginOffset).ToString(),
                     ValueType = typeof(byte),
                     CellTemplate = new DataGridViewTextBoxCell(),
                     Width = cellSize.Width,                    
@@ -82,13 +97,17 @@ namespace WinFormsTest
 
             dataGridView.Rows.Add(rowHex);
             dataGridView.Rows.Add(rowAscii);
+
+
+            // column style
+            maxOffsetLength = (beginOffset + data.Length).ToString().Length;
+            dataGridView.ColumnHeadersHeight = (cellSize.Height * maxOffsetLength);
+
+            ResumeLayout();
         }
 
         private void InitializeGridViewStyle()
         {
-            dataGridView.AutoGenerateColumns = false;
-            dataGridView.RowHeadersVisible = false;
-
             defaultCellStyle = new DataGridViewCellStyle(dataGridView.DefaultCellStyle)
             {
                 Alignment = DataGridViewContentAlignment.MiddleCenter,
@@ -105,13 +124,17 @@ namespace WinFormsTest
 
             defaultHeaderCellStyle = new DataGridViewCellStyle(defaultCellStyle)
             {
-                BackColor = SystemColors.ActiveCaption,
-                ForeColor = SystemColors.ActiveCaptionText,
+                BackColor = SystemColors.Control,
+                ForeColor = SystemColors.ControlText,
             };
 
             cellSize = TextRenderer.MeasureText(charToMeasure, defaultCellStyle.Font);
-            cellSize.Width += 8;
-            cellSize.Height += 8;
+            cellSize.Width += 6;
+            cellSize.Height += 6;
+
+            dataGridView.AutoGenerateColumns = false;
+            dataGridView.RowHeadersVisible = false;
+            dataGridView.ColumnHeadersDefaultCellStyle = defaultHeaderCellStyle;
 
             rowHex = new DataGridViewRow()
             {
@@ -124,9 +147,6 @@ namespace WinFormsTest
                 DefaultCellStyle = defaultAsciiCellStyle,
                 Height = cellSize.Height
             };
-
-            // column style
-            dataGridView.ColumnHeadersHeight = (cellSize.Height * 3);
         }
 
         private void InitializeEvents()
@@ -134,8 +154,16 @@ namespace WinFormsTest
             dataGridView.CellParsing += CellParsing;
             dataGridView.CellValidating += CellValidating;
             dataGridView.CellFormatting += CellFormatting;
-
             dataGridView.CellPainting += CellPainting;
+
+            dataGridView.CellEndEdit += (s, e) =>
+            {
+                int columnindex = e.ColumnIndex + 1;
+                if (columnindex < dataGridView.ColumnCount)
+                {
+                    dataGridView.Rows[e.RowIndex].Cells[columnindex].Selected = true;
+                }
+            };
         }
 
         // -------------------------------------------------------------------------
@@ -231,11 +259,8 @@ namespace WinFormsTest
             {
                 bool isSelected = (e.State & DataGridViewElementStates.Selected) == DataGridViewElementStates.Selected;
                 e.PaintBackground(e.CellBounds, isSelected);
-                RectangleF backRect = new RectangleF(e.CellBounds.X + 2, e.CellBounds.Y + 2, e.CellBounds.Width - 4, e.CellBounds.Height - 4);
-                //e.Graphics.FillRectangle(new SolidBrush(defaultHexBackColor), backRect);
 
-
-                SizeF charSize = e.Graphics.MeasureString(charToMeasure, dataGridView.DefaultCellStyle.Font);
+                SizeF charSize = e.Graphics.MeasureString(charToMeasure, defaultHexCellStyle.Font);
                 float cellHalfHeight = e.CellBounds.Height / 2;
                 int m = 0;
 
@@ -246,26 +271,26 @@ namespace WinFormsTest
                 RectangleF r2 = new RectangleF(p2, new SizeF(e.CellBounds.Width, cellHalfHeight));
 
                 e.Graphics.DrawString(
-                    val[0].ToString(), defaultFont, new SolidBrush(SystemColors.ControlText), r1, sf);
+                    val[0].ToString(), defaultHexCellStyle.Font, new SolidBrush(defaultHexCellStyle.ForeColor), r1, sf);
 
                 e.Graphics.DrawString(
-                    val[1].ToString(), defaultFont, new SolidBrush(SystemColors.ControlText), r2, sf);
+                    val[1].ToString(), defaultHexCellStyle.Font, new SolidBrush(defaultHexCellStyle.ForeColor), r2, sf);
             }
         }
 
         private void DrawHeaderCell(DataGridViewCellPaintingEventArgs e)
         {
-            var val = e.FormattedValue.ToString();
+            var val = e.FormattedValue.ToString().PadLeft(maxOffsetLength, '0');
 
             if (val.Length > 0)
             {
                 bool isSelected = (e.State & DataGridViewElementStates.Selected) == DataGridViewElementStates.Selected;
                 e.PaintBackground(e.CellBounds, isSelected);
-                RectangleF backRect = new RectangleF(e.CellBounds.X + 2, e.CellBounds.Y + 2, e.CellBounds.Width - 4, e.CellBounds.Height - 4);
+                RectangleF backRect = new RectangleF(e.CellBounds.X + 1, e.CellBounds.Y + 1, e.CellBounds.Width - 2, e.CellBounds.Height - 2);
                 e.Graphics.FillRectangle(new SolidBrush(defaultHeaderCellStyle.BackColor), backRect);
 
-                int m = 2;
-                SizeF charSize = e.Graphics.MeasureString(charToMeasure, dataGridView.DefaultCellStyle.Font);
+                int m = 0;
+                SizeF charSize = e.Graphics.MeasureString(charToMeasure, defaultHeaderCellStyle.Font);
                 float cellCharHeight = (e.CellBounds.Height - (val.Length * m)) / (val.Length);
                 
 
@@ -280,7 +305,6 @@ namespace WinFormsTest
 
 
                     p = new PointF(p.X, p.Y + cellCharHeight);
-                    //p.Y += p.Y + 10;// cellCharHeight;
                 }
             }
         }
